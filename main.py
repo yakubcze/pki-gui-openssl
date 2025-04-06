@@ -52,7 +52,7 @@ class CertificateAuthority:
                 log_function("CA key or certificate not found. Please create a CA first.")
 
     def create_ca(self, subject_data, valid_days=3650):
-        # Privátní klíč
+        # Private key
         self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         subject = x509.Name([
             x509.NameAttribute(NameOID.COUNTRY_NAME, subject_data["C"]),
@@ -71,7 +71,7 @@ class CertificateAuthority:
             x509.BasicConstraints(ca=True, path_length=None), critical=True
         ).sign(self.private_key, hashes.SHA256())
 
-        # Uložení
+        # Save
         with open(CA_KEY_PATH, "wb") as f:
             f.write(self.private_key.private_bytes(
                 serialization.Encoding.PEM,
@@ -258,7 +258,7 @@ class MainWindow(QWidget):
             try:
                 with open(cert["path"], "rb") as f:
                     xcert = x509.load_pem_x509_certificate(f.read())
-                    valid_to = xcert.not_valid_after.strftime("%Y-%m-%d")
+                    valid_to = xcert.not_valid_after_utc.strftime("%Y-%m-%d")
             except Exception:
                 valid_to = "N/A"
 
@@ -270,11 +270,11 @@ class MainWindow(QWidget):
         form = QFormLayout(dialog)
 
         inputs = {
-            "C": QLineEdit("CZ"),
-            "ST": QLineEdit("Ostrava"),
-            "L": QLineEdit("Ostrava"),
-            "O": QLineEdit("VSB"),
-            "CN": QLineEdit("www.example.com")
+            "Country": QLineEdit("CZ"),
+            "State": QLineEdit("Ostrava"),
+            "Locality": QLineEdit("Ostrava"),
+            "Organization name": QLineEdit("VSB"),
+            "Common Name (CN)": QLineEdit("www.example.com")
         }
 
         for label, widget in inputs.items():
@@ -313,8 +313,8 @@ class MainWindow(QWidget):
             info = {
                 "CN": cert_info["cn"],
                 "Serial number": xcert.serial_number,
-                "Issued": xcert.not_valid_before,
-                "Valid until": xcert.not_valid_after,
+                "Issued": xcert.not_valid_before_utc,
+                "Valid until": xcert.not_valid_after_utc,
                 "Issuer": xcert.issuer.rfc4514_string(),
                 "Subject": xcert.subject.rfc4514_string()
             }
