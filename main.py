@@ -24,12 +24,12 @@ os.makedirs(CERTS_DIR, exist_ok=True)
 
 
 # ====== Utility funkce ======
-def save_json(data, path):
+def saveJson(data, path):
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
 
 
-def load_json(path):
+def loadJson(path):
     if os.path.exists(path):
         with open(path) as f:
             return json.load(f)
@@ -38,28 +38,25 @@ def load_json(path):
 
 # ====== Hlavní logika CA ======
 class CertificateAuthority:
-    def __init__(self, log_function=None):
+    def __init__(self, subject_data=None):
         self.private_key = None
         self.cert = None
-        self.db = load_json(DB_PATH)
+        self.db = loadJson(DB_PATH)
 
-        if os.path.exists(CA_KEY_PATH) and os.path.exists(CA_CERT_PATH):
-            self.load_ca()
-            if log_function:
-                log_function("CA private key and certificate loaded.")
+        if subject_data:
+            self.createCa(subject_data)
         else:
-            if log_function:
-                log_function("CA key or certificate not found. Please create a CA first.")
+            self.loadCa()
 
-    def create_ca(self, subject_data, valid_days=3650):
+    def createCa(self, subject_data, valid_days=3650):
         # Private key
         self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         subject = x509.Name([
-            x509.NameAttribute(NameOID.COUNTRY_NAME, subject_data["C"]),
-            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, subject_data["ST"]),
-            x509.NameAttribute(NameOID.LOCALITY_NAME, subject_data["L"]),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, subject_data["O"]),
-            x509.NameAttribute(NameOID.COMMON_NAME, subject_data["CN"]),
+            x509.NameAttribute(NameOID.COUNTRY_NAME, subject_data["Country"]),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, subject_data["State"]),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, subject_data["Locality"]),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, subject_data["Organization name"]),
+            x509.NameAttribute(NameOID.COMMON_NAME, subject_data["Common Name (CN)"]),
         ])
         self.cert = x509.CertificateBuilder().subject_name(subject).issuer_name(subject).public_key(
             self.private_key.public_key()
@@ -81,7 +78,7 @@ class CertificateAuthority:
         with open(CA_CERT_PATH, "wb") as f:
             f.write(self.cert.public_bytes(serialization.Encoding.PEM))
 
-    def load_ca(self):
+    def loadCa(self):
         with open(CA_KEY_PATH, "rb") as f:
             self.private_key = serialization.load_pem_private_key(f.read(), password=None)
         with open(CA_CERT_PATH, "rb") as f:
@@ -89,11 +86,11 @@ class CertificateAuthority:
 
     def issue_cert(self, subject_data, valid_days=365):
         subject = x509.Name([
-            x509.NameAttribute(NameOID.COUNTRY_NAME, subject_data["C"]),
-            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, subject_data["ST"]),
-            x509.NameAttribute(NameOID.LOCALITY_NAME, subject_data["L"]),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, subject_data["O"]),
-            x509.NameAttribute(NameOID.COMMON_NAME, subject_data["CN"]),
+            x509.NameAttribute(NameOID.COUNTRY_NAME, subject_data["Country"]),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, subject_data["State"]),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, subject_data["Locality"]),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, subject_data["Organization name"]),
+            x509.NameAttribute(NameOID.COMMON_NAME, subject_data["Common Name (CN)"]),
         ])
 
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -107,7 +104,7 @@ class CertificateAuthority:
             datetime.now(UTC) + timedelta(days=valid_days)
         ).sign(self.private_key, hashes.SHA256())
 
-        filename = f"{subject_data['CN'].replace(' ', '_')}.crt"
+        filename = f"{subject_data['Common Name (CN)'].replace(' ', '_')}.crt"
         keyfile = filename.replace(".crt", ".key")
         cert_path = os.path.join(CERTS_DIR, filename)
         key_path = os.path.join(CERTS_DIR, keyfile)
@@ -122,19 +119,19 @@ class CertificateAuthority:
             ))
 
         self.db["issued"].append({
-            "cn": subject_data["CN"],
+            "cn": subject_data["Common Name (CN)"],
             "path": cert_path,
             "serial": str(cert.serial_number),
             "revoked": False
         })
-        save_json(self.db, DB_PATH)
+        saveJson(self.db, DB_PATH)
 
     def revoke_cert(self, serial):
         for cert in self.db["issued"]:
             if str(cert["serial"]) == serial:
                 cert["revoked"] = True
                 self.db["revoked"].append(cert)
-        save_json(self.db, DB_PATH)
+        saveJson(self.db, DB_PATH)
         self.generate_crl()
 
     def generate_crl(self):
@@ -160,12 +157,11 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("CA GUI")
-        
-
         self.layout = QVBoxLayout()
 
         # Buttons
         self.btn_create_ca = QPushButton("Create CA")
+        self.btn_reset = QPushButton("Reset")
         self.btn_issue_cert = QPushButton("Issue certificate")
         self.btn_revoke_cert = QPushButton("Revoke certificate")
         self.btn_show_details = QPushButton("Show details")
@@ -187,6 +183,7 @@ class MainWindow(QWidget):
         # Buttons layout
         btn_row_layout = QHBoxLayout()
         btn_row_layout.addWidget(self.btn_create_ca)
+        btn_row_layout.addWidget(self.btn_reset)
         btn_row_layout.addWidget(self.btn_issue_cert)
         btn_row_layout.addWidget(self.btn_revoke_cert)
         btn_row_layout.addWidget(self.btn_show_details)
@@ -201,45 +198,105 @@ class MainWindow(QWidget):
         self.setLayout(self.layout)
 
         # Connect signals
-        self.btn_create_ca.clicked.connect(self.create_ca)
-        self.btn_issue_cert.clicked.connect(self.issue_cert)
-        self.btn_revoke_cert.clicked.connect(self.revoke_cert)
-        self.btn_show_details.clicked.connect(self.show_cert_details)
+        self.btn_create_ca.clicked.connect(self.createCa)
+        self.btn_reset.clicked.connect(self.resetAll)
+        self.btn_issue_cert.clicked.connect(self.issueCert)
+        self.btn_revoke_cert.clicked.connect(self.revokeCert)
+        self.btn_show_details.clicked.connect(self.showCertDetails)
 
-        self.ca = CertificateAuthority(log_function=self.log_msg)
-        self.refresh_table()
+        if os.path.exists(CA_KEY_PATH) and os.path.exists(CA_CERT_PATH):
+            self.ca = CertificateAuthority()
+            self.logMsg("CA loaded.")
+            self.setCaButtonsState(ca_loaded=True)
+            self.refreshTable()
+        else:
+            self.ca = None
+            self.setCaButtonsState(ca_loaded=False)
+            self.logMsg("No CA found, please create one.")
+        
 
-    def log_msg(self, msg):
+    def logMsg(self, msg):
         self.log.append(msg)
 
-    def create_ca(self):
-        form = self.get_form_data()
-        if form:
-            self.ca.create_ca(form)
-            self.log_msg("CA created.")
-            self.refresh_table()
+    def createCa(self):
+        subject_data = self.getFormData()
+        if subject_data:
+            self.ca = CertificateAuthority(subject_data)
+            self.logMsg("CA created.")
+            self.setCaButtonsState(ca_loaded=True)
+            self.refreshTable()
+        else:
+            raise ValueError("Invalid subject data.")
+    
+    def setCaButtonsState(self, ca_loaded=False):
+        self.btn_create_ca.setEnabled(not ca_loaded)
+        self.btn_reset.setEnabled(ca_loaded)
+        self.btn_issue_cert.setEnabled(ca_loaded)
+        self.btn_revoke_cert.setEnabled(ca_loaded)
+        self.btn_show_details.setEnabled(ca_loaded)
 
-    def issue_cert(self):
+    def resetAll(self):
+        reply = QMessageBox.question(
+            self,
+            "Confirm Reset",
+            "Are you sure you want to reset the CA? This will delete all certificates, the CA, and the database.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.No:
+            self.logMsg("Reset canceled.")
+            return
+        
+        # Delete CA key and cert
+        if os.path.exists(CA_KEY_PATH):
+            os.remove(CA_KEY_PATH)
+        if os.path.exists(CA_CERT_PATH):
+            os.remove(CA_CERT_PATH)
+
+        # Delete all certificates
+        for cert in os.listdir(CERTS_DIR):
+            os.remove(os.path.join(CERTS_DIR, cert))
+
+        # Delete CRL
+        if os.path.exists(CRL_PATH):
+            os.remove(CRL_PATH)
+        
+        # Delete database
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
+        self.cert_table.setRowCount(0)
+        self.ca = None
+        
+        self.setCaButtonsState(ca_loaded=False)
+        self.logMsg("CA, all certificates and database deleted.")
+
+    def issueCert(self):
         if not self.ca.cert:
             QMessageBox.warning(self, "Error", "No CA loaded.")
             return
 
-        form = self.get_form_data()
+        form = self.getFormData()
         if form:
+            if any(cert["cn"] == form["Common Name (CN)"] for cert in self.ca.db["issued"]):
+                QMessageBox.warning(self, "Error", "Certificate with this CN already exists.")
+                return
             self.ca.issue_cert(form)
-            self.log_msg(f"Issued certificate for {form['CN']}")
-            self.refresh_table()
+            self.logMsg(f"Issued certificate for {form['Common Name (CN)']}.")
+            self.refreshTable()
 
-    def revoke_cert(self):
+    def revokeCert(self):
         row = self.cert_table.currentRow()
         if row < 0:
             return
+        if self.cert_table.item(row, 2).text() == "REVOKED":
+            QMessageBox.warning(self, "Error", "Certificate already revoked.")
+            return
         serial = self.cert_table.item(row, 1).text()
         self.ca.revoke_cert(serial)
-        self.log_msg(f"Certicate {serial} revoked.")
-        self.refresh_table()
+        self.logMsg(f"Certicate {serial} revoked.")
+        self.refreshTable()
 
-    def refresh_table(self):
+    def refreshTable(self):
         self.cert_table.setRowCount(0)
         for cert in self.ca.db["issued"]:
             row = self.cert_table.rowCount()
@@ -265,7 +322,7 @@ class MainWindow(QWidget):
             valid_item = QTableWidgetItem(valid_to)
             self.cert_table.setItem(row, 3, valid_item)
 
-    def get_form_data(self):
+    def getFormData(self):
         dialog = QWidget()
         form = QFormLayout(dialog)
 
@@ -295,7 +352,7 @@ class MainWindow(QWidget):
 
         return {k: w.text() for k, w in inputs.items()}
 
-    def show_cert_details(self):
+    def showCertDetails(self):
         row = self.cert_table.currentRow()
         if row < 0:
             return
