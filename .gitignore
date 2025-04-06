@@ -3,3 +3,6 @@ semestrální projekty_VPBK_v3.pdf
 *.key
 *.pem
 db.json
+
+dist/
+build/
