@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography import x509
 from cryptography.x509 import NameOID
 
-# ====== Cesty a složky ======
+# ====== Paths ======
 DATA_DIR = "data"
 CERTS_DIR = os.path.join(DATA_DIR, "certs")
 DB_PATH = os.path.join(DATA_DIR, "db.json")
@@ -23,7 +23,7 @@ CRL_PATH = os.path.join(DATA_DIR, "crl.pem")
 os.makedirs(CERTS_DIR, exist_ok=True)
 
 
-# ====== Utility funkce ======
+# ====== Utility ======
 def saveJson(data, path):
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
@@ -36,7 +36,7 @@ def loadJson(path):
     return {"issued": [], "revoked": []}
 
 
-# ====== Hlavní logika CA ======
+# ====== CA ======
 class CertificateAuthority:
     def __init__(self, subject_data=None):
         self.private_key = None
@@ -58,14 +58,14 @@ class CertificateAuthority:
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, subject_data["Organization name"]),
             x509.NameAttribute(NameOID.COMMON_NAME, subject_data["Common Name (CN)"]),
         ])
-        self.cert = x509.CertificateBuilder().subject_name(subject).issuer_name(subject).public_key(
-            self.private_key.public_key()
-        ).serial_number(x509.random_serial_number()).not_valid_before(
-            datetime.now(UTC)
-        ).not_valid_after(
-            datetime.now(UTC) + timedelta(days=valid_days)
-        ).add_extension(
-            x509.BasicConstraints(ca=True, path_length=None), critical=True
+        self.cert = x509.CertificateBuilder(
+        ).subject_name(subject
+        ).issuer_name(subject
+        ).public_key(self.private_key.public_key()
+        ).serial_number(x509.random_serial_number()
+        ).not_valid_before(datetime.now(UTC)
+        ).not_valid_after(datetime.now(UTC) + timedelta(days=valid_days)
+        ).add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True
         ).sign(self.private_key, hashes.SHA256())
 
         # Save
@@ -94,14 +94,13 @@ class CertificateAuthority:
         ])
 
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        cert = x509.CertificateBuilder().subject_name(subject).issuer_name(
-            self.cert.subject
-        ).public_key(
-            key.public_key()
-        ).serial_number(x509.random_serial_number()).not_valid_before(
-            datetime.now(UTC)
-        ).not_valid_after(
-            datetime.now(UTC) + timedelta(days=valid_days)
+        cert = x509.CertificateBuilder(
+        ).subject_name(subject
+        ).issuer_name(self.cert.subject
+        ).public_key(key.public_key()
+        ).serial_number(x509.random_serial_number()
+        ).not_valid_before(datetime.now(UTC)
+        ).not_valid_after(datetime.now(UTC) + timedelta(days=valid_days)
         ).sign(self.private_key, hashes.SHA256())
 
         filename = f"{subject_data['Common Name (CN)'].replace(' ', '_')}.crt"
@@ -142,9 +141,9 @@ class CertificateAuthority:
         for revoked in self.db["revoked"]:
             revoked_cert = x509.RevokedCertificateBuilder().serial_number(
                 int(revoked["serial"])
-            ).revocation_date(
-                datetime.now(UTC)
+            ).revocation_date(datetime.now(UTC)
             ).build()
+            
             builder = builder.add_revoked_certificate(revoked_cert)
 
         crl = builder.sign(private_key=self.private_key, algorithm=hashes.SHA256())
@@ -381,7 +380,7 @@ class MainWindow(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error while reading certificate", str(e))
 
-# ====== Spuštění ======
+# ====== launch ======
 app = QApplication(sys.argv)
 window = MainWindow()
 window.resize(600, 500)
