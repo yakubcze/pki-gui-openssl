@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['c:/Skola/VSB/10. semestr/VPBK/projekt/main.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -21,12 +21,12 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='CA GUI',
+    name='main',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
